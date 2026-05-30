@@ -4,39 +4,70 @@ import { useEffect, useState } from "react";
 
 import {
   collection,
-  getDocs,
   doc,
   updateDoc,
+  onSnapshot,
 } from "firebase/firestore";
 
-import { db } from "../lib/firebase";
+import {
+  onAuthStateChanged,
+} from "firebase/auth";
+
+import { auth, db } from "../lib/firebase";
 
 export default function AdminPage() {
 
   const [bookings, setBookings] = useState<any[]>([]);
-
-  const fetchBookings = async () => {
-
-    const querySnapshot = await getDocs(
-      collection(db, "bookings")
-    );
-
-    const data: any[] = [];
-
-    querySnapshot.forEach((docItem) => {
-
-      data.push({
-        id: docItem.id,
-        ...docItem.data(),
-      });
-    });
-
-    setBookings(data);
-  };
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
 
-    fetchBookings();
+    const unsubscribeAuth =
+      onAuthStateChanged(auth, (user) => {
+
+        if (!user) {
+          window.location.href = "/";
+          return;
+        }
+
+        // GANTI EMAIL INI DENGAN EMAIL ADMIN KAMU
+        if (
+          user.email !== "abaxstertattoo@gmail.com"
+        ) {
+          alert("ACCESS DENIED");
+
+          window.location.href =
+            "/dashboard";
+
+          return;
+        }
+
+        const unsubscribeBookings =
+          onSnapshot(
+            collection(db, "bookings"),
+            (snapshot) => {
+
+              const data: any[] = [];
+
+              snapshot.forEach((docItem) => {
+
+                data.push({
+                  id: docItem.id,
+                  ...docItem.data(),
+                });
+              });
+
+              setBookings(data);
+              setLoading(false);
+            }
+          );
+
+        return () =>
+          unsubscribeBookings();
+      });
+
+    return () =>
+      unsubscribeAuth();
 
   }, []);
 
@@ -53,13 +84,12 @@ export default function AdminPage() {
         id
       );
 
-      await updateDoc(bookingRef, {
-        status,
-      });
-
-      alert("STATUS UPDATED 🔥");
-
-      fetchBookings();
+      await updateDoc(
+        bookingRef,
+        {
+          status,
+        }
+      );
 
     } catch (error: any) {
 
@@ -83,12 +113,17 @@ export default function AdminPage() {
 
       </div>
 
-      {/* BOOKINGS */}
       <section className="mt-16">
 
         <h2 className="text-4xl font-black mb-10">
           CLIENT BOOKINGS
         </h2>
+
+        {loading && (
+          <p className="text-zinc-500">
+            Loading bookings...
+          </p>
+        )}
 
         <div className="space-y-6">
 
@@ -106,7 +141,7 @@ export default function AdminPage() {
                     CLIENT EMAIL
                   </p>
 
-                  <h3 className="text-2xl font-bold mt-2">
+                  <h3 className="text-xl font-bold mt-2">
                     {booking.email}
                   </h3>
                 </div>
@@ -116,7 +151,7 @@ export default function AdminPage() {
                     WHATSAPP
                   </p>
 
-                  <h3 className="text-2xl font-bold mt-2">
+                  <h3 className="text-xl font-bold mt-2">
                     {booking.whatsapp}
                   </h3>
                 </div>
@@ -126,7 +161,7 @@ export default function AdminPage() {
                     TATTOO
                   </p>
 
-                  <h3 className="text-2xl font-bold mt-2 text-yellow-400">
+                  <h3 className="text-xl font-bold mt-2 text-yellow-400">
                     {booking.tattooName}
                   </h3>
                 </div>
@@ -136,7 +171,7 @@ export default function AdminPage() {
                     ARTIST
                   </p>
 
-                  <h3 className="text-2xl font-bold mt-2">
+                  <h3 className="text-xl font-bold mt-2">
                     {booking.artist}
                   </h3>
                 </div>
@@ -146,7 +181,7 @@ export default function AdminPage() {
                     DATE
                   </p>
 
-                  <h3 className="text-2xl font-bold mt-2">
+                  <h3 className="text-xl font-bold mt-2">
                     {booking.date}
                   </h3>
                 </div>
@@ -156,7 +191,20 @@ export default function AdminPage() {
                     STATUS
                   </p>
 
-                  <h3 className="text-2xl font-black mt-2 text-red-500">
+                  <h3
+                    className={`text-2xl font-black mt-2 ${
+                      booking.status ===
+                      "APPROVED"
+                        ? "text-green-400"
+                        : booking.status ===
+                          "COMPLETED"
+                        ? "text-yellow-400"
+                        : booking.status ===
+                          "REJECTED"
+                        ? "text-red-500"
+                        : "text-orange-400"
+                    }`}
+                  >
                     {booking.status}
                   </h3>
                 </div>
@@ -175,8 +223,8 @@ export default function AdminPage() {
 
               </div>
 
-              {/* ACTION BUTTONS */}
-              <div className="flex gap-4 mt-10">
+              {/* ACTIONS */}
+              <div className="flex flex-wrap gap-4 mt-10">
 
                 <button
                   onClick={() =>
@@ -185,7 +233,7 @@ export default function AdminPage() {
                       "APPROVED"
                     )
                   }
-                  className="bg-green-500 hover:bg-green-400 text-black px-6 py-3 rounded-xl font-black transition"
+                  className="bg-green-500 hover:bg-green-400 text-black px-6 py-3 rounded-xl font-black"
                 >
                   APPROVE
                 </button>
@@ -197,9 +245,21 @@ export default function AdminPage() {
                       "REJECTED"
                     )
                   }
-                  className="bg-red-500 hover:bg-red-400 px-6 py-3 rounded-xl font-black transition"
+                  className="bg-red-500 hover:bg-red-400 px-6 py-3 rounded-xl font-black"
                 >
                   REJECT
+                </button>
+
+                <button
+                  onClick={() =>
+                    updateStatus(
+                      booking.id,
+                      "COMPLETED"
+                    )
+                  }
+                  className="bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-3 rounded-xl font-black"
+                >
+                  COMPLETE
                 </button>
 
               </div>
